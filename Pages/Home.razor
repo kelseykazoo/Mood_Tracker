@@ -1,0 +1,92 @@
+﻿@inject IJSRuntime JS
+@page "/"
+@using MoodTrackerWeb.Models
+@using System.Text.Json
+
+<h1>Mood Tracker</h1>
+
+<EditForm Model="@entry" OnValidSubmit="@SaveMood">
+    <InputText @bind-Value="entry.Mood" placeholder="Your mood" class="form-control" />
+    <br />
+    <InputTextArea @bind-Value="entry.Note" placeholder="Add a note..." class="form-control" />
+    <br />
+    <button class="btn btn-primary" type="submit">Save</button>
+</EditForm>
+
+@if (confirmationMessage != null)
+{
+    <p style="color: green">@confirmationMessage</p>
+}
+
+@code {
+    private MoodEntry entry = new();
+    private List<MoodEntry> entries = new();
+
+    private string? confirmationMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        string? json = await JS.InvokeAsync<string>("moodStorage.load", "moods");
+
+        if (!string.IsNullOrEmpty(json))
+        {
+            entries = JsonSerializer.Deserialize<List<MoodEntry>>(json) ?? new List<MoodEntry>();
+        }
+    }
+
+    private async Task SaveMood()
+    {
+        entries.Add(entry);
+        string json = JsonSerializer.Serialize(entries);
+        await JS.InvokeVoidAsync("moodStorage.save", "moods", json);
+        confirmationMessage = $"Mood saved: {entry.Mood}";
+        entry = new(); // reset form
+    }
+
+    private string GetEmoji(string? mood)
+    {
+        if (string.IsNullOrWhiteSpace(mood))
+            return "📝";
+
+        return mood.ToLower() switch
+        {
+            "happy" => "😊",
+            "sad" => "😢",
+            "angry" => "😠",
+            "tired" => "😴",
+            "excited" => "🤩",
+            "anxious" => "😰",
+            "bored" => "😐",
+            "calm" => "🧘‍♀️",
+            "silly" => "🤪",
+            _ => "📝"
+        };
+    }
+
+    private async Task DeleteMood(MoodEntry mood)
+    {
+        entries.Remove(mood);
+        string json = JsonSerializer.Serialize(entries);
+        await JS.InvokeVoidAsync("moodStorage.save", "moods", json);
+    }
+
+
+}
+
+@if (entries.Any())
+{
+    <h3>Your Mood History</h3>
+    <ul class="list-group">
+        @foreach (var mood in entries.OrderByDescending(e => e.MyDate))
+        {
+            <li class="list-group-item mb-2 d-flex justify-content-between align-items-start">
+                <div>
+                    <strong>@mood.MyDate.ToString("MMM dd, yyyy @ h:mm tt")</strong><br />
+                    <span>@GetEmoji(mood.Mood) <strong>@mood.Mood</strong></span><br />
+                    <em>@mood.Note</em>
+                </div>
+                <button class="btn btn-sm btn-outline-danger ms-2" @onclick="@(() => DeleteMood(mood))">🗑️</button>
+            </li>
+        }
+    </ul>
+}
